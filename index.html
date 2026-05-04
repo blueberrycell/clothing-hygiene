@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hygiene Tracker</title>
+    <style>
+        :root {
+            --bg-color: #f4f4f9;
+            --text-color: #333;
+            --card-bg: #fff;
+            --primary: #4a90e2;
+            --success: #2ecc71;
+            --warning: #f39c12;
+            --danger: #e74c3c;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: var(--primary);
+        }
+
+        .header-buttons {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        button {
+            border: none;
+            border-radius: 8px;
+            padding: 10px 15px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        button:active {
+            opacity: 0.7;
+        }
+
+        .btn-settings {
+            background-color: #7f8c8d;
+            color: white;
+            width: 100%;
+        }
+
+        .btn-reset {
+            background-color: var(--success);
+            color: white;
+            padding: 12px;
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        .item-card {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .status-badge {
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 14px;
+            color: white;
+        }
+
+        .status-good { background-color: var(--success); }
+        .status-warn { background-color: var(--warning); }
+        .status-bad { background-color: var(--danger); }
+
+        .item-details {
+            margin-top: 5px;
+            font-size: 14px;
+            color: #7f8c8d;
+        }
+
+        /* Settings View */
+        #settings-view {
+            display: none;
+        }
+
+        .setting-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--card-bg);
+            padding: 10px 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+        }
+
+        .setting-row input {
+            width: 60px;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 16px;
+            text-align: center;
+        }
+
+        .btn-save {
+            background-color: var(--primary);
+            color: white;
+            width: 100%;
+            padding: 15px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- MAIN TRACKER VIEW -->
+    <div id="tracker-view">
+        <h1>Hygiene Tracker</h1>
+        <div class="header-buttons">
+            <button class="btn-settings" onclick="toggleView()">⚙️ Einstellungen (Dauer ändern)</button>
+        </div>
+        <div id="item-list"></div>
+    </div>
+
+    <!-- SETTINGS VIEW -->
+    <div id="settings-view">
+        <h1>Einstellungen</h1>
+        <p style="text-align: center; color: #7f8c8d;">Maximale Tragezeit in Tagen</p>
+        <div id="settings-list"></div>
+        <button class="btn-save" onclick="saveSettings()">Speichern & Zurück</button>
+    </div>
+
+    <script>
+        // Standardwerte basierend auf unserer Tabelle (in Tagen)
+        // Handtuch auf 10 Tage gesetzt (entspricht bei dir ca. 3x Duschen)
+        const defaultData = [
+            { id: 'underpants', name: 'Unterhosen', maxDays: 1, lastChanged: Date.now() },
+            { id: 'socks', name: 'Socken', maxDays: 1, lastChanged: Date.now() },
+            { id: 'tshirt', name: 'T-Shirt', maxDays: 2, lastChanged: Date.now() },
+            { id: 'jeans', name: 'Jeans', maxDays: 7, lastChanged: Date.now() },
+            { id: 'trousers', name: 'Andere Hosen', maxDays: 3, lastChanged: Date.now() },
+            { id: 'hoodie', name: 'Hoodie / Jacke', maxDays: 5, lastChanged: Date.now() },
+            { id: 'pyjama_shirt', name: 'Schlaf-Shirt', maxDays: 3, lastChanged: Date.now() },
+            { id: 'pyjama_pants', name: 'Schlaf-Hose', maxDays: 3, lastChanged: Date.now() },
+            { id: 'towel', name: 'Badehandtuch', maxDays: 10, lastChanged: Date.now() },
+            { id: 'pillow', name: 'Kopfkissenbezug', maxDays: 10, lastChanged: Date.now() },
+            { id: 'blanket', name: 'Bettdeckenbezug', maxDays: 14, lastChanged: Date.now() },
+            { id: 'mattress', name: 'Matratzenschoner', maxDays: 45, lastChanged: Date.now() }
+        ];
+
+        let items = [];
+
+        // Daten aus dem lokalen Speicher laden oder Standardwerte nehmen
+        function loadData() {
+            const stored = localStorage.getItem('hygieneTrackerData');
+            if (stored) {
+                items = JSON.parse(stored);
+            } else {
+                items = JSON.parse(JSON.stringify(defaultData)); // Deep copy
+                saveData();
+            }
+        }
+
+        // Daten speichern
+        function saveData() {
+            localStorage.setItem('hygieneTrackerData', JSON.stringify(items));
+        }
+
+        // Berechnet die vergangenen Tage seit dem letzten Wechsel
+        function getDaysElapsed(timestamp) {
+            const msPerDay = 1000 * 60 * 60 * 24;
+            const elapsedMs = Date.now() - timestamp;
+            return Math.floor(elapsedMs / msPerDay);
+        }
+
+        // Hauptliste rendern
+        function renderTracker() {
+            const container = document.getElementById('item-list');
+            container.innerHTML = '';
+
+            items.forEach(item => {
+                const daysElapsed = getDaysElapsed(item.lastChanged);
+                const daysRemaining = item.maxDays - daysElapsed;
+                
+                let statusClass = 'status-good';
+                let statusText = 'Alles frisch';
+
+                if (daysRemaining <= 1 && daysRemaining > 0) {
+                    statusClass = 'status-warn';
+                    statusText = 'Bald wechseln';
+                } else if (daysRemaining <= 0) {
+                    statusClass = 'status-bad';
+                    statusText = 'Wechseln fällig!';
+                }
+
+                const card = document.createElement('div');
+                card.className = 'item-card';
+                card.innerHTML = `
+                    <div class="item-header">
+                        <span>${item.name}</span>
+                        <span class="status-badge ${statusClass}">${statusText}</span>
+                    </div>
+                    <div class="item-details">
+                        Tag ${daysElapsed} von max. ${item.maxDays}
+                    </div>
+                    <button class="btn-reset" onclick="resetItem('${item.id}')">🔄 Gewechselt / Gewaschen</button>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        // Setzt den Timer für ein Item zurück
+        function resetItem(id) {
+            const item = items.find(i => i.id === id);
+            if (item) {
+                item.lastChanged = Date.now();
+                saveData();
+                renderTracker();
+            }
+        }
+
+        // Einstellungen rendern
+        function renderSettings() {
+            const container = document.getElementById('settings-list');
+            container.innerHTML = '';
+
+            items.forEach(item => {
+                const row = document.createElement('div');
+                row.className = 'setting-row';
+                row.innerHTML = `
+                    <label>${item.name}</label>
+                    <div>
+                        <input type="number" id="input-${item.id}" value="${item.maxDays}" min="1" max="365"> Tage
+                    </div>
+                `;
+                container.appendChild(row);
+            });
+        }
+
+        // Speichert die neuen Dauern aus den Einstellungen
+        function saveSettings() {
+            items.forEach(item => {
+                const inputVal = document.getElementById(`input-${item.id}`).value;
+                item.maxDays = parseInt(inputVal) || item.maxDays;
+            });
+            saveData();
+            toggleView();
+        }
+
+        // Wechselt zwischen Tracker und Einstellungen
+        function toggleView() {
+            const tracker = document.getElementById('tracker-view');
+            const settings = document.getElementById('settings-view');
+            
+            if (tracker.style.display === 'none') {
+                tracker.style.display = 'block';
+                settings.style.display = 'none';
+                renderTracker();
+            } else {
+                tracker.style.display = 'none';
+                settings.style.display = 'block';
+                renderSettings();
+            }
+        }
+
+        // App starten
+        loadData();
+        renderTracker();
+    </script>
+</body>
+</html>
