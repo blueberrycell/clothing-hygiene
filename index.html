@@ -87,6 +87,8 @@
             border-radius: 20px;
             font-size: 14px;
             color: white;
+            white-space: nowrap;
+            margin-left: 10px;
         }
 
         .status-good { background-color: var(--success); }
@@ -106,21 +108,60 @@
 
         .setting-row {
             display: flex;
-            justify-content: space-between;
-            align-items: center;
+            flex-direction: column;
             background: var(--card-bg);
-            padding: 10px 15px;
+            padding: 15px;
             margin-bottom: 10px;
             border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
 
-        .setting-row input {
-            width: 60px;
+        .setting-row input[type="text"] {
+            width: 100%;
             padding: 8px;
             border: 1px solid #ccc;
             border-radius: 5px;
             font-size: 16px;
+            font-weight: bold;
+            box-sizing: border-box;
+            margin-bottom: 10px;
+        }
+
+        .setting-inputs {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+        }
+
+        .setting-inputs input[type="number"] {
+            width: 50px;
+            padding: 6px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 14px;
             text-align: center;
+        }
+
+        .btn-delete {
+            background-color: var(--danger);
+            color: white;
+            padding: 8px 12px;
+            margin-left: auto;
+        }
+
+        .add-item-card {
+            background: var(--card-bg);
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 25px;
+            border: 2px dashed #bdc3c7;
+        }
+
+        .add-item-card h3 {
+            margin-top: 0;
+            color: var(--primary);
         }
 
         .btn-save {
@@ -129,6 +170,7 @@
             width: 100%;
             padding: 15px;
             margin-top: 20px;
+            margin-bottom: 30px;
         }
     </style>
 </head>
@@ -138,22 +180,33 @@
     <div id="tracker-view">
         <h1>Hygiene Tracker</h1>
         <div class="header-buttons">
-            <button class="btn-settings" onclick="toggleView()">⚙️ Einstellungen (Dauer ändern)</button>
+            <button class="btn-settings" onclick="toggleView()">⚙️ Liste bearbeiten</button>
         </div>
         <div id="item-list"></div>
     </div>
 
     <!-- SETTINGS VIEW -->
     <div id="settings-view">
-        <h1>Einstellungen</h1>
-        <p style="text-align: center; color: #7f8c8d;">Maximale Tragezeit in Tagen</p>
+        <h1>Liste bearbeiten</h1>
+        <p style="text-align: center; color: #7f8c8d; font-size: 14px;">Namen ändern, bisherige Tage anpassen oder Elemente löschen.</p>
+        
         <div id="settings-list"></div>
+
+        <!-- Add New Item Section -->
+        <div class="add-item-card">
+            <h3>Neues Element hinzufügen</h3>
+            <input type="text" id="new-item-name" placeholder="Name (z.B. Winterjacke)" style="width: 100%; padding: 8px; margin-bottom: 10px; box-sizing: border-box; font-size: 16px;">
+            <div class="setting-inputs">
+                <label>Aktuelle Tage: <input type="number" id="new-item-current" value="0" min="0"></label>
+                <label>Max. Tage: <input type="number" id="new-item-max" value="3" min="1"></label>
+            </div>
+            <button class="btn-reset" style="background-color: var(--primary); margin-top: 15px;" onclick="addNewItem()">+ Hinzufügen</button>
+        </div>
+
         <button class="btn-save" onclick="saveSettings()">Speichern & Zurück</button>
     </div>
 
     <script>
-        // Standardwerte basierend auf unserer Tabelle (in Tagen)
-        // Handtuch auf 10 Tage gesetzt (entspricht bei dir ca. 3x Duschen)
         const defaultData = [
             { id: 'underpants', name: 'Unterhosen', maxDays: 1, lastChanged: Date.now() },
             { id: 'socks', name: 'Socken', maxDays: 1, lastChanged: Date.now() },
@@ -171,30 +224,26 @@
 
         let items = [];
 
-        // Daten aus dem lokalen Speicher laden oder Standardwerte nehmen
         function loadData() {
             const stored = localStorage.getItem('hygieneTrackerData');
             if (stored) {
                 items = JSON.parse(stored);
             } else {
-                items = JSON.parse(JSON.stringify(defaultData)); // Deep copy
+                items = JSON.parse(JSON.stringify(defaultData)); 
                 saveData();
             }
         }
 
-        // Daten speichern
         function saveData() {
             localStorage.setItem('hygieneTrackerData', JSON.stringify(items));
         }
 
-        // Berechnet die vergangenen Tage seit dem letzten Wechsel
         function getDaysElapsed(timestamp) {
             const msPerDay = 1000 * 60 * 60 * 24;
             const elapsedMs = Date.now() - timestamp;
             return Math.floor(elapsedMs / msPerDay);
         }
 
-        // Hauptliste rendern
         function renderTracker() {
             const container = document.getElementById('item-list');
             container.innerHTML = '';
@@ -230,7 +279,6 @@
             });
         }
 
-        // Setzt den Timer für ein Item zurück
         function resetItem(id) {
             const item = items.find(i => i.id === id);
             if (item) {
@@ -240,35 +288,88 @@
             }
         }
 
-        // Einstellungen rendern
         function renderSettings() {
             const container = document.getElementById('settings-list');
             container.innerHTML = '';
 
             items.forEach(item => {
+                const currentDays = getDaysElapsed(item.lastChanged);
                 const row = document.createElement('div');
                 row.className = 'setting-row';
                 row.innerHTML = `
-                    <label>${item.name}</label>
-                    <div>
-                        <input type="number" id="input-${item.id}" value="${item.maxDays}" min="1" max="365"> Tage
+                    <input type="text" id="name-${item.id}" value="${item.name}">
+                    <div class="setting-inputs">
+                        <label>Ist-Tage: <input type="number" id="current-${item.id}" value="${currentDays}" min="0"></label>
+                        <label>Max. Tage: <input type="number" id="max-${item.id}" value="${item.maxDays}" min="1"></label>
+                        <button class="btn-delete" onclick="deleteItem('${item.id}')">🗑️</button>
                     </div>
                 `;
                 container.appendChild(row);
             });
         }
 
-        // Speichert die neuen Dauern aus den Einstellungen
+        function deleteItem(id) {
+            if (confirm("Möchtest du dieses Element wirklich löschen?")) {
+                items = items.filter(i => i.id !== id);
+                saveData();
+                renderSettings();
+            }
+        }
+
+        function addNewItem() {
+            const nameInput = document.getElementById('new-item-name').value.trim();
+            const currentDays = parseInt(document.getElementById('new-item-current').value) || 0;
+            const maxDays = parseInt(document.getElementById('new-item-max').value) || 1;
+
+            if (!nameInput) {
+                alert("Bitte gib einen Namen für das neue Element ein.");
+                return;
+            }
+
+            const msPerDay = 1000 * 60 * 60 * 24;
+            const newItem = {
+                id: 'custom_' + Date.now(),
+                name: nameInput,
+                maxDays: maxDays,
+                lastChanged: Date.now() - (currentDays * msPerDay)
+            };
+
+            items.push(newItem);
+            saveData();
+            renderSettings();
+
+            // Formular zurücksetzen
+            document.getElementById('new-item-name').value = '';
+            document.getElementById('new-item-current').value = '0';
+            document.getElementById('new-item-max').value = '3';
+        }
+
         function saveSettings() {
+            const msPerDay = 1000 * 60 * 60 * 24;
+            
             items.forEach(item => {
-                const inputVal = document.getElementById(`input-${item.id}`).value;
-                item.maxDays = parseInt(inputVal) || item.maxDays;
+                const nameInput = document.getElementById(`name-${item.id}`);
+                const currentInput = document.getElementById(`current-${item.id}`);
+                const maxInput = document.getElementById(`max-${item.id}`);
+
+                // Überspringen, falls das Element gerade gelöscht wurde und nicht mehr im DOM ist
+                if (!nameInput) return; 
+
+                const newName = nameInput.value.trim() || item.name;
+                const newCurrentDays = parseInt(currentInput.value) || 0;
+                const newMaxDays = parseInt(maxInput.value) || item.maxDays;
+
+                item.name = newName;
+                item.maxDays = newMaxDays;
+                
+                // Berechnet den Startzeitpunkt (lastChanged) neu, basierend auf den manuell eingegebenen Ist-Tagen
+                item.lastChanged = Date.now() - (newCurrentDays * msPerDay);
             });
+            
             saveData();
             toggleView();
         }
 
-        // Wechselt zwischen Tracker und Einstellungen
         function toggleView() {
             const tracker = document.getElementById('tracker-view');
             const settings = document.getElementById('settings-view');
