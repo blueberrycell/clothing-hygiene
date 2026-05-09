@@ -33,7 +33,24 @@
         .header-buttons {
             display: flex;
             justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .sort-container {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
             margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .sort-container select {
+            padding: 6px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            margin-left: 10px;
+            font-size: 14px;
+            background-color: var(--card-bg);
         }
 
         button {
@@ -144,6 +161,14 @@
             text-align: center;
         }
 
+        .btn-icon {
+            background: none;
+            border: none;
+            padding: 5px;
+            font-size: 18px;
+            color: #7f8c8d;
+        }
+
         .btn-delete {
             background-color: var(--danger);
             color: white;
@@ -182,13 +207,23 @@
         <div class="header-buttons">
             <button class="btn-settings" onclick="toggleView()">⚙️ Liste bearbeiten</button>
         </div>
+        
+        <div class="sort-container">
+            <label for="sort-select">Sortieren nach:</label>
+            <select id="sort-select" onchange="changeSortMode()">
+                <option value="manual">Manuell</option>
+                <option value="soonest">Bald fällig</option>
+                <option value="recent">Zuletzt gewechselt</option>
+            </select>
+        </div>
+
         <div id="item-list"></div>
     </div>
 
     <!-- SETTINGS VIEW -->
     <div id="settings-view">
         <h1>Liste bearbeiten</h1>
-        <p style="text-align: center; color: #7f8c8d; font-size: 14px;">Namen ändern, bisherige Tage anpassen oder Elemente löschen.</p>
+        <p style="text-align: center; color: #7f8c8d; font-size: 14px;">Reihenfolge verschieben, Namen ändern oder Elemente löschen.</p>
         
         <div id="settings-list"></div>
 
@@ -203,7 +238,7 @@
             <button class="btn-reset" style="background-color: var(--primary); margin-top: 15px;" onclick="addNewItem()">+ Hinzufügen</button>
         </div>
 
-        <button class="btn-save" onclick="saveSettings()">Speichern & Zurück</button>
+        <button class="btn-save" onclick="saveSettingsAndExit()">Speichern & Zurück</button>
     </div>
 
     <script>
@@ -223,14 +258,22 @@
         ];
 
         let items = [];
+        let currentSortMode = 'manual';
 
         function loadData() {
             const stored = localStorage.getItem('hygieneTrackerData');
+            const storedSort = localStorage.getItem('hygieneTrackerSort');
+            
             if (stored) {
                 items = JSON.parse(stored);
             } else {
                 items = JSON.parse(JSON.stringify(defaultData)); 
                 saveData();
+            }
+
+            if (storedSort) {
+                currentSortMode = storedSort;
+                document.getElementById('sort-select').value = currentSortMode;
             }
         }
 
@@ -244,11 +287,35 @@
             return Math.floor(elapsedMs / msPerDay);
         }
 
+        function changeSortMode() {
+            currentSortMode = document.getElementById('sort-select').value;
+            localStorage.setItem('hygieneTrackerSort', currentSortMode);
+            renderTracker();
+        }
+
         function renderTracker() {
             const container = document.getElementById('item-list');
             container.innerHTML = '';
 
-            items.forEach(item => {
+            // Liste für die Anzeige kopieren und sortieren, ohne das Original-Array zu verändern
+            let displayItems = [...items];
+
+            if (currentSortMode === 'soonest') {
+                displayItems.sort((a, b) => {
+                    const remainingA = a.maxDays - getDaysElapsed(a.lastChanged);
+                    const remainingB = b.maxDays - getDaysElapsed(b.lastChanged);
+                    return remainingA - remainingB;
+                });
+            } else if (currentSortMode === 'recent') {
+                displayItems.sort((a, b) => {
+                    const elapsedA = getDaysElapsed(a.lastChanged);
+                    const elapsedB = getDaysElapsed(b.lastChanged);
+                    return elapsedA - elapsedB;
+                });
+            }
+            // 'manual' behält die Standardreihenfolge des Arrays bei
+
+            displayItems.forEach(item => {
                 const daysElapsed = getDaysElapsed(item.lastChanged);
                 const daysRemaining = item.maxDays - daysElapsed;
                 
@@ -292,15 +359,19 @@
             const container = document.getElementById('settings-list');
             container.innerHTML = '';
 
-            items.forEach(item => {
+            items.forEach((item, index) => {
                 const currentDays = getDaysElapsed(item.lastChanged);
                 const row = document.createElement('div');
                 row.className = 'setting-row';
                 row.innerHTML = `
                     <input type="text" id="name-${item.id}" value="${item.name}">
                     <div class="setting-inputs">
-                        <label>Ist-Tage: <input type="number" id="current-${item.id}" value="${currentDays}" min="0"></label>
+                        <button class="btn-icon" onclick="moveItem('${item.id}', 'up')" ${index === 0 ? 'style="opacity:0.2; pointer-events:none;"' : ''}>⬆️</button>
+                        <button class="btn-icon" onclick="moveItem('${item.id}', 'down')" ${index === items.length - 1 ? 'style="opacity:0.2; pointer-events:none;"' : ''}>⬇️</button>
+                        
+                        <label style="margin-left: 10px;">Ist-Tage: <input type="number" id="current-${item.id}" value="${currentDays}" min="0"></label>
                         <label>Max. Tage: <input type="number" id="max-${item.id}" value="${item.maxDays}" min="1"></label>
+                        
                         <button class="btn-delete" onclick="deleteItem('${item.id}')">🗑️</button>
                     </div>
                 `;
@@ -308,8 +379,51 @@
             });
         }
 
+        // Speichert die Eingabefelder ins Array, damit beim Verschieben keine Eingaben verloren gehen
+        function syncInputsToArray() {
+            const msPerDay = 1000 * 60 * 60 * 24;
+            
+            items.forEach(item => {
+                const nameInput = document.getElementById(`name-${item.id}`);
+                const currentInput = document.getElementById(`current-${item.id}`);
+                const maxInput = document.getElementById(`max-${item.id}`);
+
+                if (!nameInput) return; 
+
+                item.name = nameInput.value.trim() || item.name;
+                item.maxDays = parseInt(maxInput.value) || item.maxDays;
+                
+                const oldCurrentDays = getDaysElapsed(item.lastChanged);
+                const newCurrentDays = parseInt(currentInput.value) || 0;
+
+                // Datum nur aktualisieren, wenn der Nutzer die Zahl aktiv geändert hat
+                if (oldCurrentDays !== newCurrentDays) {
+                    item.lastChanged = Date.now() - (newCurrentDays * msPerDay);
+                }
+            });
+        }
+
+        function moveItem(id, direction) {
+            syncInputsToArray();
+            
+            const index = items.findIndex(i => i.id === id);
+            if (direction === 'up' && index > 0) {
+                const temp = items[index];
+                items[index] = items[index - 1];
+                items[index - 1] = temp;
+            } else if (direction === 'down' && index < items.length - 1) {
+                const temp = items[index];
+                items[index] = items[index + 1];
+                items[index + 1] = temp;
+            }
+            
+            saveData();
+            renderSettings();
+        }
+
         function deleteItem(id) {
             if (confirm("Möchtest du dieses Element wirklich löschen?")) {
+                syncInputsToArray();
                 items = items.filter(i => i.id !== id);
                 saveData();
                 renderSettings();
@@ -317,6 +431,8 @@
         }
 
         function addNewItem() {
+            syncInputsToArray();
+            
             const nameInput = document.getElementById('new-item-name').value.trim();
             const currentDays = parseInt(document.getElementById('new-item-current').value) || 0;
             const maxDays = parseInt(document.getElementById('new-item-max').value) || 1;
@@ -338,34 +454,13 @@
             saveData();
             renderSettings();
 
-            // Formular zurücksetzen
             document.getElementById('new-item-name').value = '';
             document.getElementById('new-item-current').value = '0';
             document.getElementById('new-item-max').value = '3';
         }
 
-        function saveSettings() {
-            const msPerDay = 1000 * 60 * 60 * 24;
-            
-            items.forEach(item => {
-                const nameInput = document.getElementById(`name-${item.id}`);
-                const currentInput = document.getElementById(`current-${item.id}`);
-                const maxInput = document.getElementById(`max-${item.id}`);
-
-                // Überspringen, falls das Element gerade gelöscht wurde und nicht mehr im DOM ist
-                if (!nameInput) return; 
-
-                const newName = nameInput.value.trim() || item.name;
-                const newCurrentDays = parseInt(currentInput.value) || 0;
-                const newMaxDays = parseInt(maxInput.value) || item.maxDays;
-
-                item.name = newName;
-                item.maxDays = newMaxDays;
-                
-                // Berechnet den Startzeitpunkt (lastChanged) neu, basierend auf den manuell eingegebenen Ist-Tagen
-                item.lastChanged = Date.now() - (newCurrentDays * msPerDay);
-            });
-            
+        function saveSettingsAndExit() {
+            syncInputsToArray();
             saveData();
             toggleView();
         }
