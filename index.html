@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hygiene Tracker</title>
     <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Hygiene">
-<!-- Ein Platzhalter-Icon für deinen Home-Screen -->
-<link rel="apple-touch-icon" href="https://via.placeholder.com/192/4a90e2/ffffff?text=H">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Hygiene">
+    <!-- Ein Platzhalter-Icon für deinen Home-Screen -->
+    <link rel="apple-touch-icon" href="https://via.placeholder.com/192/4a90e2/ffffff?text=H">
     <style>
         :root {
             --bg-color: #f4f4f9;
@@ -181,7 +181,7 @@
             margin-left: auto;
         }
 
-        .add-item-card {
+        .add-item-card, .data-transfer-card {
             background: var(--card-bg);
             padding: 15px;
             border-radius: 8px;
@@ -189,9 +189,22 @@
             border: 2px dashed #bdc3c7;
         }
 
-        .add-item-card h3 {
+        .add-item-card h3, .data-transfer-card h3 {
             margin-top: 0;
             color: var(--primary);
+            margin-bottom: 10px;
+        }
+
+        .data-transfer-card textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box;
+            font-family: monospace;
+            font-size: 12px;
+            margin-bottom: 10px;
+            resize: vertical;
         }
 
         .btn-save {
@@ -241,6 +254,17 @@
                 <label>Max. Tage: <input type="number" id="new-item-max" value="3" min="1"></label>
             </div>
             <button class="btn-reset" style="background-color: var(--primary); margin-top: 15px;" onclick="addNewItem()">+ Hinzufügen</button>
+        </div>
+
+        <!-- Data Import/Export Section -->
+        <div class="data-transfer-card">
+            <h3>Daten Import / Export</h3>
+            <p style="font-size: 13px; color: #7f8c8d; margin-top: 0;">Kopiere den Text, um ihn auf ein anderes Gerät zu übertragen, oder füge fremden Text hier ein.</p>
+            <textarea id="data-transfer-area" rows="4" placeholder="Hier erscheint der Daten-Code..."></textarea>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn-reset" style="background-color: #34495e; margin-top: 0; flex: 1;" onclick="exportData()">Exportieren</button>
+                <button class="btn-reset" style="background-color: var(--warning); margin-top: 0; flex: 1;" onclick="importData()">Importieren</button>
+            </div>
         </div>
 
         <button class="btn-save" onclick="saveSettingsAndExit()">Speichern & Zurück</button>
@@ -318,7 +342,6 @@
                     return elapsedA - elapsedB;
                 });
             }
-            // 'manual' behält die Standardreihenfolge des Arrays bei
 
             displayItems.forEach(item => {
                 const daysElapsed = getDaysElapsed(item.lastChanged);
@@ -384,7 +407,6 @@
             });
         }
 
-        // Speichert die Eingabefelder ins Array, damit beim Verschieben keine Eingaben verloren gehen
         function syncInputsToArray() {
             const msPerDay = 1000 * 60 * 60 * 24;
             
@@ -401,7 +423,6 @@
                 const oldCurrentDays = getDaysElapsed(item.lastChanged);
                 const newCurrentDays = parseInt(currentInput.value) || 0;
 
-                // Datum nur aktualisieren, wenn der Nutzer die Zahl aktiv geändert hat
                 if (oldCurrentDays !== newCurrentDays) {
                     item.lastChanged = Date.now() - (newCurrentDays * msPerDay);
                 }
@@ -463,6 +484,45 @@
             document.getElementById('new-item-current').value = '0';
             document.getElementById('new-item-max').value = '3';
         }
+
+        // --- NEUE EXPORT/IMPORT FUNKTIONEN ---
+        function exportData() {
+            syncInputsToArray(); // Sichert eventuell gerade getippte Änderungen
+            const exportString = JSON.stringify(items);
+            const textarea = document.getElementById('data-transfer-area');
+            textarea.value = exportString;
+            textarea.select();
+            alert("Daten erfolgreich exportiert! Du kannst den Code im Textfeld nun kopieren.");
+        }
+
+        function importData() {
+            const textarea = document.getElementById('data-transfer-area');
+            const importString = textarea.value.trim();
+            
+            if (!importString) {
+                alert("Bitte füge zuerst den kopierten Daten-Code in das Textfeld ein.");
+                return;
+            }
+
+            try {
+                const parsedData = JSON.parse(importString);
+                
+                if (Array.isArray(parsedData) && parsedData.length > 0 && parsedData[0].hasOwnProperty('id')) {
+                    if (confirm("Möchtest du deine aktuellen Daten wirklich mit den eingefügten Daten überschreiben?")) {
+                        items = parsedData;
+                        saveData();
+                        renderSettings();
+                        textarea.value = ''; // Feld wieder leeren
+                        alert("Daten wurden erfolgreich importiert!");
+                    }
+                } else {
+                    alert("Fehler: Das Format der eingefügten Daten ist ungültig.");
+                }
+            } catch (error) {
+                alert("Fehler beim Importieren! Bitte stelle sicher, dass der gesamte Text korrekt und vollständig kopiert wurde.");
+            }
+        }
+        // -------------------------------------
 
         function saveSettingsAndExit() {
             syncInputsToArray();
